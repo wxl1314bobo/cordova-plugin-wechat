@@ -29,6 +29,7 @@ import com.tencent.mm.opensdk.modelbiz.ChooseCardFromWXCardPackage;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaArgs;
 import org.apache.cordova.CordovaPlugin;
+import org.apache.cordova.CordovaPreferences;
 import org.apache.cordova.PluginResult;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -39,8 +40,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
 
 public class Wechat extends CordovaPlugin {
 
@@ -99,12 +98,14 @@ public class Wechat extends CordovaPlugin {
     protected static IWXAPI wxAPI;
     protected static String appId;
 
+    protected static CordovaPreferences wx_preferences;
+
     @Override
     protected void pluginInitialize() {
 
         super.pluginInitialize();
 
-        String id = getAppId();
+        String id = getAppId(preferences);
 
         // save app id
         saveAppId(cordova.getActivity(), id);
@@ -117,9 +118,11 @@ public class Wechat extends CordovaPlugin {
 
     protected void initWXAPI() {
         IWXAPI api = getWxAPI(cordova.getActivity());
-
+        if(wx_preferences == null) {
+            wx_preferences = preferences;
+        }
         if (api != null) {
-            api.registerApp(getAppId());
+            api.registerApp(getAppId(preferences));
         }
     }
 
@@ -280,7 +283,7 @@ public class Wechat extends CordovaPlugin {
 
         try {
             final String appid = params.getString("appid");
-            final String savedAppid = getAppId(cordova.getActivity());
+            final String savedAppid = getAppId(preferences);
             if (!savedAppid.equals(appid)) {
                 this.saveAppId(cordova.getActivity(), appid);
             }
@@ -332,7 +335,7 @@ public class Wechat extends CordovaPlugin {
                ChooseCardFromWXCardPackage.Req req = new ChooseCardFromWXCardPackage.Req();
 
                try {
-                   req.appId = getAppId();
+                   req.appId = getAppId(preferences);
                    req.cardType = "INVOICE";
                    req.signType = params.getString("signType");
                    req.cardSign = params.getString("cardSign");
@@ -516,12 +519,6 @@ public class Wechat extends CordovaPlugin {
                 Bitmap scaled = Bitmap.createScaledBitmap(bmp, width, height, true);
                 bmp.recycle();
 
-                int length = scaled.getRowBytes() * scaled.getHeight();
-
-                if(length > (maxSize/10)*1024) {
-                    scaled = compressImage(scaled,(maxSize/10));
-                }
-
                 bmp = scaled;
             }
 
@@ -536,29 +533,6 @@ public class Wechat extends CordovaPlugin {
         }
 
         return bmp;
-    }
-
-
-    /**
-     * compress bitmap by quility
-     *
-     * @param url
-     * @return
-     */    
-    protected  Bitmap compressImage(Bitmap image,Integer maxSize) {
-
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        image.compress(Bitmap.CompressFormat.JPEG, 100, baos);
-        int options = 90;
-
-        while (baos.toByteArray().length / 1024 > maxSize) { 
-            baos.reset(); 
-            image.compress(Bitmap.CompressFormat.JPEG, options, baos);
-            options -= 10;
-        }
-        ByteArrayInputStream isBm = new ByteArrayInputStream(baos.toByteArray());
-        Bitmap bitmap = BitmapFactory.decodeStream(isBm, null, null);
-        return bitmap;
     }
 
     /**
@@ -626,11 +600,14 @@ public class Wechat extends CordovaPlugin {
         return null;
     }
 
-    public static String getAppId() {
-        if (appId == null) {
-            appId = preferences.getString(WXAPPID_PROPERTY_KEY, "");
+    public static String getAppId(CordovaPreferences f_preferences) {
+        if(appId == null){
+            if(f_preferences != null) {
+                appId = f_preferences.getString(WXAPPID_PROPERTY_KEY, "");
+            }else if(wx_preferences != null){
+                appId = wx_preferences.getString(WXAPPID_PROPERTY_KEY, "");
+            }
         }
-
         return appId;
     }
 
@@ -650,7 +627,7 @@ public class Wechat extends CordovaPlugin {
      * @param id
      */
     public static void saveAppId(Context ctx, String id) {
-        if (id.isEmpty()) {
+        if(id == null || id.isEmpty()) {
             return ;
         }
 
